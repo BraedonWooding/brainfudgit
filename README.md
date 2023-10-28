@@ -1,4 +1,4 @@
-# BrainF**k Compiler
+# BrainFudgit: BrainF**k Compiler
 
 A pretty heavily over-engineered compiler built to test LLVM/Custom JIT/Custom AOT compilation & architecture of a compiler.
 
@@ -17,11 +17,17 @@ Arguments:
 
   [COMMANDS]...
           Possible values:
-          - lexer:           Run the lexer
-          - parser:          Run the parser
-          - ast-interpreter: Run the AST as is
+          - lexer:                Run the lexer
+          - parser:               Run the parser
+          - bytecode:             Output Bytecode
+          - ast-interpreter:      Run the AST as is
+          - bytecode-interpreter: Run the bytecode interpreter
 
 Options:
+  -o, --optimizations <OPTIMIZATIONS>
+          Possible values:
+          - constant-folding: Fold calculations into a constant
+
   -d, --default-runtime-size <DEFAULT_RUNTIME_SIZE>
           [default: 30000]
 

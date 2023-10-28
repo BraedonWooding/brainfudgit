@@ -1,8 +1,7 @@
 pub mod ast_interpreter;
+pub mod bytecode_interpreter;
 
 use std::io::{Read, Write};
-
-use crate::parser::Program;
 
 pub struct Runtime {
     /// Pointer into the heap
@@ -16,20 +15,26 @@ pub struct Runtime {
 }
 
 impl Runtime {
+    pub fn reset(&mut self) {
+        // TODO: Reset IO
+        self.heap = vec![0; self.heap.len()];
+        self.data_pointer = 0;
+    }
+
     /// Read from stream in runtime and write to data pointer
-    pub fn read(&mut self) {
+    pub fn read(&mut self, len: usize) {
         self.check_data_pointer();
         // a bit odd but is just an easy way to write directly into the vec by converting it to a slice
         self.in_stream
-            .read_exact(&mut self.heap[self.data_pointer..self.data_pointer + 1])
+            .read_exact(&mut self.heap[self.data_pointer..self.data_pointer + len])
             .unwrap();
     }
 
     /// Write to stream in runtime from data pointer
-    pub fn write(&mut self) {
+    pub fn write(&mut self, len: usize) {
         self.check_data_pointer();
         self.out_stream
-            .write(&self.heap[self.data_pointer..self.data_pointer + 1])
+            .write(&self.heap[self.data_pointer..self.data_pointer + len])
             .unwrap();
     }
 
@@ -51,13 +56,14 @@ impl Runtime {
 
     /// is the value at the data pointer zero?
     pub fn value_is_zero(&self) -> bool {
+        self.check_data_pointer();
         self.heap[self.data_pointer] == 0
     }
 
     /// check if the data pointer is within bounds
     fn check_data_pointer(&self) {
-        if self.data_pointer > self.heap.len() {
-            panic!("Data pointer out of bounds");
+        if self.data_pointer >= self.heap.len() {
+            panic!("Data pointer ({}) out of bounds (max length {})", self.data_pointer, self.heap.len());
         }
     }
 }
@@ -71,8 +77,4 @@ impl Runtime {
             out_stream,
         }
     }
-}
-
-pub trait Interpreter {
-    fn interpret(&mut self, runtime: &mut Runtime, program: &Program);
 }
