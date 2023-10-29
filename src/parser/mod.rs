@@ -2,13 +2,14 @@ pub mod parser;
 
 #[derive(Debug, Clone)]
 pub enum AstKind {
-    ShiftDataPointer(isize),
+    Increment,
+    Decrement,
 
-    DerefIncrement(u8),
-    DerefDecrement(u8),
+    DerefIncrement,
+    DerefDecrement,
 
-    Write(usize),
-    Read(usize),
+    Write,
+    Read,
 
     Loop(BasicBlock),
 }

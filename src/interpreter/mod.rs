@@ -1,5 +1,6 @@
 pub mod ast_interpreter;
 pub mod bytecode_interpreter;
+pub mod mir_interpreter;
 
 use std::io::{Read, Write};
 

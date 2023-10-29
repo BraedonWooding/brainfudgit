@@ -1,5 +1,8 @@
-use crate::parser::{BasicBlock, AstKind};
+use crate::optimizer::MirAstKind;
 
+use super::MirBasicBlock;
+
+/// Constant folds a sequence of `$pattern` instructions into a single instruction
 macro_rules! constant_fold_instruction {
     ($pc: tt, $bytecode: tt, $pattern: path) => {
         let old_pos = $pc;
@@ -23,21 +26,25 @@ macro_rules! constant_fold_instruction {
 }
 
 /// A form of constant folding that folds multiple adds/subs into one
-pub fn constant_folding(block: &mut BasicBlock) {
+pub fn constant_folding(block: &mut MirBasicBlock) {
     let mut pc = 0;
     let instructions = &mut block.instructions;
     while pc < instructions.len() {
         match instructions[pc] {
-            AstKind::ShiftDataPointer(_) => {
-                constant_fold_instruction!(pc, instructions, AstKind::ShiftDataPointer);
+            MirAstKind::ShiftDataPointer(_) => {
+                constant_fold_instruction!(pc, instructions, MirAstKind::ShiftDataPointer);
             }
-            AstKind::DerefIncrement(_) => {
-                constant_fold_instruction!(pc, instructions, AstKind::DerefIncrement);
+            MirAstKind::DerefIncrement(_) => {
+                constant_fold_instruction!(pc, instructions, MirAstKind::DerefIncrement);
             }
             // technically you could combine deref sub & add but I don't know why you would
             // i.e. + - + - is just nothing, but that is just irrelevant
-            AstKind::DerefDecrement(_) => {
-                constant_fold_instruction!(pc, instructions, AstKind::DerefDecrement);
+            MirAstKind::DerefDecrement(_) => {
+                constant_fold_instruction!(pc, instructions, MirAstKind::DerefDecrement);
+            }
+            MirAstKind::Loop(ref mut inner_block) => {
+                // Also fold the inner block...
+                constant_folding(inner_block);
             }
             // everything else is ignored
             _ => {}

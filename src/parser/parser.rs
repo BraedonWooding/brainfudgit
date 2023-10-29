@@ -20,12 +20,12 @@ impl<'a> Parser<'a> {
 
         while let Some(token) = self.tokens.next() {
             instructions.push(match *token {
-                LexerTokenKind::Increment => AstKind::ShiftDataPointer(1),
-                LexerTokenKind::Decrement => AstKind::ShiftDataPointer(-1),
-                LexerTokenKind::DerefIncrement => AstKind::DerefIncrement(1),
-                LexerTokenKind::DerefDecrement => AstKind::DerefDecrement(1),
-                LexerTokenKind::Write => AstKind::Write(1),
-                LexerTokenKind::Read => AstKind::Read(1),
+                LexerTokenKind::Increment => AstKind::Increment,
+                LexerTokenKind::Decrement => AstKind::Decrement,
+                LexerTokenKind::DerefIncrement => AstKind::DerefIncrement,
+                LexerTokenKind::DerefDecrement => AstKind::DerefDecrement,
+                LexerTokenKind::Write => AstKind::Write,
+                LexerTokenKind::Read => AstKind::Read,
                 LexerTokenKind::JumpStart => AstKind::Loop(self.parse_block()),
                 // the loop has ended so we can break
                 LexerTokenKind::JumpEnd => break,

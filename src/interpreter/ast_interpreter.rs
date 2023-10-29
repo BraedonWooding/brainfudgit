@@ -15,11 +15,12 @@ impl AstInterpreter {
         // written tihs way since the upper-most block (program) doesn't repeat
         for instruction in block.instructions.iter() {
             match instruction {
-                parser::AstKind::ShiftDataPointer(i) => runtime.shift_data_pointer(*i),
-                parser::AstKind::DerefIncrement(i) => runtime.deref_and_add_value(*i),
-                parser::AstKind::DerefDecrement(i) => runtime.deref_and_sub_value(*i),
-                parser::AstKind::Write(i) => runtime.write(*i),
-                parser::AstKind::Read(i) => runtime.read(*i),
+                parser::AstKind::Increment => runtime.shift_data_pointer(1),
+                parser::AstKind::Decrement => runtime.shift_data_pointer(-1),
+                parser::AstKind::DerefIncrement => runtime.deref_and_add_value(1),
+                parser::AstKind::DerefDecrement => runtime.deref_and_sub_value(1),
+                parser::AstKind::Write => runtime.write(1),
+                parser::AstKind::Read => runtime.read(1),
                 parser::AstKind::Loop(sub_block) => {
                     while !runtime.value_is_zero() {
                         self.interpret_block(runtime, sub_block);

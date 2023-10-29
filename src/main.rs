@@ -6,6 +6,7 @@ pub mod interpreter;
 pub mod lexer;
 pub mod optimizer;
 pub mod parser;
+pub mod jit;
 
 use std::{
     collections::HashSet,
@@ -21,8 +22,8 @@ use lexer::lexer::Lexer;
 use crate::{
     bytecode::bytecode::to_bytecode,
     interpreter::{
-        ast_interpreter::AstInterpreter, bytecode_interpreter::ByteCodeInterpreter, Runtime,
-    },
+        ast_interpreter::AstInterpreter, bytecode_interpreter::ByteCodeInterpreter, Runtime, mir_interpreter::MirInterpreter,
+    }, optimizer::optimize,
 };
 
 /// Brainf**k compiler/optimizer/JIT/AOT/interpreter
@@ -39,6 +40,9 @@ struct Args {
     #[arg(short, long, value_enum)]
     optimizations: Vec<Optimizations>,
 
+    #[arg(short, long)]
+    all_optimizations: bool,
+
     #[arg(short, long, default_value_t = 30_000)]
     default_runtime_size: usize,
 }
@@ -47,19 +51,24 @@ struct Args {
 pub enum Optimizations {
     /// Fold calculations into a constant
     ConstantFolding,
+    CommentBlock,
 }
 
 #[derive(ValueEnum, Debug, Clone, Hash, PartialEq, Eq)]
 enum Commands {
-    /// Run the lexer
-    Lexer,
-    /// Run the parser
-    Parser,
+    /// Output the lexer
+    Tokens,
+    /// Output the ast
+    Ast,
     /// Output Bytecode
     Bytecode,
+    /// Output MIR ast
+    MirAst,
 
     /// Run the AST as is
     AstInterpreter,
+    /// Run the MIR interpreter
+    MirInterpreter,
     /// Run the bytecode interpreter
     BytecodeInterpreter,
 }
@@ -67,7 +76,12 @@ enum Commands {
 fn main() -> Result<(), ()> {
     let args = Args::parse();
     let commands: HashSet<Commands> = HashSet::from_iter(args.commands.into_iter());
-    let optimizations: HashSet<Optimizations> = HashSet::from_iter(args.optimizations.into_iter());
+    let mut optimizations: HashSet<Optimizations> = HashSet::from_iter(args.optimizations.into_iter());
+    // TODO: Loop through all enum variants to avoid this duplication
+    if args.all_optimizations {
+        optimizations.insert(Optimizations::CommentBlock);
+        optimizations.insert(Optimizations::ConstantFolding);
+    }
 
     println!("Running {}", args.file);
 
@@ -79,7 +93,7 @@ fn main() -> Result<(), ()> {
     let result = lexer.collect_results().unwrap();
     println!("{} {:.2?}", "Finished lexing in".green(), now.elapsed());
 
-    if commands.contains(&Commands::Lexer) {
+    if commands.contains(&Commands::Tokens) {
         for token in result.iter() {
             print!(
                 "{}",
@@ -110,7 +124,7 @@ fn main() -> Result<(), ()> {
     let program = ast.parse_program();
     println!("{} {:.2?}", "Finished parsing in".green(), now.elapsed());
 
-    if commands.contains(&Commands::Parser) {
+    if commands.contains(&Commands::Ast) {
         println!("{:#?}", program);
     }
 
@@ -123,6 +137,7 @@ fn main() -> Result<(), ()> {
         println!("{}", "Starting ast-interpreter".blue());
         now = Instant::now();
         AstInterpreter::new().interpret(&mut runtime, &program);
+        runtime.reset();
         println!();
         println!(
             "{} {:.2?}",
@@ -130,24 +145,40 @@ fn main() -> Result<(), ()> {
             now.elapsed()
         );
     }
-
-    println!("{}", "Starting bytecode (no optimizations)".blue());
+    
+    println!("{} {:?}", "Starting optimizations".blue(), &optimizations);
     now = Instant::now();
-    let bytecode = to_bytecode(&program, &HashSet::new());
+    let optimized_program = optimize(&program, &optimizations);
     println!(
-        "{} {} in {:.2?}",
-        "Finished bytecode conversion with unoptimized length".green(),
-        bytecode.len(),
+        "{} in {:.2?}",
+        "Finished optimizations".green(),
         now.elapsed()
     );
 
+    if commands.contains(&Commands::MirAst) {
+        println!("{:#?}", optimized_program);
+    }
+
+    if commands.contains(&Commands::MirInterpreter) {
+        println!("{}", "Starting mir-interpreter".blue());
+        now = Instant::now();
+        MirInterpreter::new().interpret(&mut runtime, &optimized_program);
+        runtime.reset();
+        println!();
+        println!(
+            "{} {:.2?}",
+            "Finished mir-interpreter in".green(),
+            now.elapsed()
+        );
+    }
+
     println!(
         "{} {:?}",
-        "Starting bytecode & optimizations".blue(),
+        "Starting bytecode".blue(),
         optimizations
     );
     now = Instant::now();
-    let bytecode = to_bytecode(&program, &optimizations);
+    let bytecode = to_bytecode(&optimized_program);
     println!(
         "{} {} in {:.2?}",
         "Finished bytecode conversion with optimized length".green(),
@@ -163,7 +194,7 @@ fn main() -> Result<(), ()> {
         println!("{}", "Starting bytecode-interpreter".blue());
         now = Instant::now();
         // TODO: Remove this once we have a better way of benchmarking this (using rust benchmarks)
-        for i in 0..10000 {
+        for _ in 0..10000 {
             ByteCodeInterpreter::new().run(&mut runtime, &bytecode);
             runtime.reset();
         }
