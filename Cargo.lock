@@ -51,6 +51,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbitrary-int"
+version = "1.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe8e2a586ecd6eb29477a0c25b19742acca4fa5e39c92e127656616810c20579"
+
+[[package]]
+name = "bitbybit"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e144815f5dc02cef6b94d9000c25a1737a1688da707c81ebb1aa729371bea37"
+dependencies = [
+ "arbitrary-int",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -60,6 +78,8 @@ checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
 name = "brainfudgit"
 version = "0.1.0"
 dependencies = [
+ "arbitrary-int",
+ "bitbybit",
  "bitflags",
  "clap",
  "colored",
