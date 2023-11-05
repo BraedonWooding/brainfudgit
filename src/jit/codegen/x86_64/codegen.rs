@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 
-use super::CodeGen;
-
 use arbitrary_int::u3;
-use bitbybit::{bitfield, bitenum};
-use bitflags::bitflags;
 
 /*
     - RSP/ESP (Stack Pointer): Data Pointer
@@ -19,30 +15,57 @@ use bitflags::bitflags;
     So often sub-functions will recheck enums and state rather than rely on having to be called in multiple ways.
 */
 
+
+
 pub struct X86_64Codegen {
     bytes: Vec<u8>,
 }
 
-#[derive(Debug)]
-#[bitenum(u4, exhaustive: true)]
-pub enum Register {
-    RAX = 0b0000,
-    RCX = 0b0001,
-    RDX = 0b0010,
-    RBX = 0b0011,
-    RSP = 0b0100,
-    RBP = 0b0101,
-    RSI = 0b0110,
-    RDI = 0b0111,
-    // The first bit becomes a rex prefix
-    R8 = 0b1000,
-    R9 = 0b1001,
-    R10 = 0b1010,
-    R11 = 0b1011,
-    R12 = 0b1100,
-    R13 = 0b1101,
-    R14 = 0b1110,
-    R15 = 0b1111,
+#[derive(Clone, Debug)]
+pub struct Label {
+    /// The offset of the label in the instruction byte array
+    label_offset: Option<usize>,
+
+    /// The location of all the jumps that will jump to the specified label
+    jump_offsets: Vec<usize>,
+}
+
+impl Label {
+    pub fn new() -> Label {
+        Label {
+            label_offset: None,
+            jump_offsets: vec![],
+        }
+    }
+
+    pub fn define_label(&mut self, label_offset: usize) {
+        self.label_offset = Some(label_offset);
+    }
+
+    pub fn current_offset_as_label(&mut self, assembler: &X86_64Codegen) {
+        self.define_label(assembler.current_offset());
+    }
+
+    pub fn add_jump(&mut self, assembler: &mut X86_64Codegen) {
+        // add a constant that we'll later on replace with the actual jump offset
+        self.jump_offsets.push(assembler.current_offset());
+        assembler.emit32(0xDEADBEEF);
+    }
+
+    pub fn link_jumps(&self, assembler: &mut X86_64Codegen) {
+        // presume 32 bit jumps
+        let label_offset = self.label_offset.expect("Can't link jumps until we have the label defined");
+        for jump_offset in self.jump_offsets.iter() {
+            // just doing it this manual way to prevent having to do weird casts to isize prior to subtraction
+            let offset: isize = if label_offset > *jump_offset {
+                (label_offset - *jump_offset) as isize
+            } else {
+                -((*jump_offset - label_offset) as isize)
+            };
+
+            assembler.set(*jump_offset, &offset.to_le_bytes());
+        }
+    }
 }
 
 #[repr(u8)]
@@ -107,281 +130,7 @@ pub enum JumpOpCode {
     JumpIfNotZero = 85,
 }
 
-/// The addressing mode of the registers, this is the first 2 bits of the ModRM
-#[bitenum(u2, exhaustive: true)]
-pub enum AddressingMode {
-    /// Dereference the memory location at the register but there is no additional displacement
-    ZeroByteDisplacement = 0b00,
-    /// Dereference the memory location at the register and apply the displacement that is stored 1 byte after MOD R/M but before the constant/immediate
-    OneByteDisplacement = 0b01,
-    FourByteDisplacement = 0b10,
-    /// No indirect lookups of memory locations just use the direct value stored in the register
-    RegisterDirect = 0b11,
-}
 
-impl AddressingMode {
-    pub fn from_operand(op: Operand) -> AddressingMode {
-        match op {
-            Operand::Register(_, None) => AddressingMode::RegisterDirect,
-            Operand::Register(_, Some(0)) => AddressingMode::ZeroByteDisplacement,
-            Operand::Register(_, Some(displacement)) =>
-                if X86_64Codegen::value_fits_in_i8(displacement) { AddressingMode::OneByteDisplacement }
-                else { AddressingMode::FourByteDisplacement },
-            Operand::Immediate(_) => unreachable!("This shouldn't be reached can't get addressing mode from an immediate"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Label {
-    /// The offset of the label in the instruction byte array
-    label_offset: Option<usize>,
-
-    /// The location of all the jumps that will jump to the specified label
-    jump_offsets: Vec<usize>,
-}
-
-impl Label {
-    pub fn new() -> Label {
-        Label {
-            label_offset: None,
-            jump_offsets: vec![],
-        }
-    }
-
-    pub fn define_label(&mut self, label_offset: usize) {
-        self.label_offset = Some(label_offset);
-    }
-
-    pub fn current_offset_as_label(&mut self, assembler: &X86_64Codegen) {
-        self.define_label(assembler.current_offset());
-    }
-
-    pub fn add_jump(&mut self, assembler: &mut X86_64Codegen) {
-        // add a constant that we'll later on replace with the actual jump offset
-        self.jump_offsets.push(assembler.current_offset());
-        assembler.emit32(0xDEADBEEF);
-    }
-
-    pub fn link_jumps(&self, assembler: &mut X86_64Codegen) {
-        // presume 32 bit jumps
-        let label_offset = self.label_offset.expect("Can't link jumps until we have the label defined");
-        for jump_offset in self.jump_offsets.iter() {
-            // just doing it this manual way to prevent having to do weird casts to isize prior to subtraction
-            let offset: isize = if label_offset > *jump_offset {
-                (label_offset - *jump_offset) as isize
-            } else {
-                -((*jump_offset - label_offset) as isize)
-            };
-
-            assembler.set(*jump_offset, &offset.to_le_bytes());
-        }
-    }
-}
-
-bitflags! {
-    pub struct RexPrefixEncoding : u8 {
-        const Base  = 0b0100_000;
-        const W     = 0b0001_000;
-        const R     = 0b0000_100;
-        const X     = 0b0000_010;
-        const B     = 0b0000_001;
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Operand {
-    Register(Register, Option<usize>),
-    Immediate(usize),
-}
-
-impl Register {
-    pub fn encode_register(&self) -> EncodedRegister {
-        // https://wiki.osdev.org/X86-64_Instruction_Encoding#Registers
-        // X.Reg, in this case our encoded register is just encoding the Y part of X.YYY
-        // we'll need to set REX flags X & B when using dest & src registers
-        return EncodedRegister::new_with_raw_value(u3::from((*self as u8) & 0x7));
-    }
-}
-
-impl RexPrefixEncoding {
-    pub fn as_u8(&self) -> u8 {
-        self.bits() as u8
-    }
-
-    pub fn from_operands(dst: Operand, src: Operand) -> RexPrefixEncoding {
-        let mut result = RexPrefixEncoding::Base | RexPrefixEncoding::W;
-
-        if let Operand::Register(dst, _) = dst {
-            if dst as u8 > 7 {
-                result |= RexPrefixEncoding::B;
-            }
-        }
-        if let Operand::Register(src, _) = src {
-            if src as u8 > 7 {
-                result |= RexPrefixEncoding::R;
-            }
-        }
-
-        result
-    }
-
-    pub fn from_operand(dst: Operand) -> RexPrefixEncoding {
-        // re-using above, so that we don't need to parse this into registers before we use it
-        RexPrefixEncoding::from_operands(dst, Operand::Immediate(0))
-    }
-}
-
-#[derive(Clone, Debug)]
-enum OperandEncoding {
-    /// "I", Operand 1 = AL/AX/EAX/RAX, Operand 2 = imm8/16/32
-    /// has no MOD/RM byte, has separate opcode for AL/AX
-    /// and can use REX.W to 64 bit extend to RAX.
-    ImmediateEncoding(Immediate),
-
-    /// "MI", Operand 1 = ModRM:r/m (r, w), Operand 2 = imm8/16/32
-    MemoryImmediateEncoding(),
-    
-    /// "MR", Operand 1 = ModRM:r/m (r, w), Operand 2 = ModRM:reg (r)
-    MemoryRegisterEncoding(),
-    
-    /// "RM", Operand 1 = ModRM:reg (r), Operand 2 = ModRM:r/m (r, w)
-    RegisterMemoryEncoding(),
-
-    /// "OI", Operand 1 = opcode + rd (w), Operand 2 = imm8/16/32/64
-    OpcodeImmediate(Operand, Immediate),
-
-    // TODO: FD & TD
-}
-
-const TWO_BYTE_OPCODE_VALUE: u8 = 0x0F;
-
-/// The encodings that can be emitted prior to the instruction
-/// written this way since there is an order to the prefixes
-pub struct Prefix {
-    mandatory_prefix: Option<u8>,
-    /// If set it should just be set to `TWO_BYTE_OPCODE_VALUE`
-    two_byte_opcode: Option<u8>,
-    rex: Option<RexPrefixEncoding>,
-}
-
-pub struct Instruction {
-    prefix: Prefix,
-
-    primary_opcode: u8,
-    displacement: Option<Displacement>,
-    immediate: Option<Immediate>,
-}
-
-impl Instruction {
-    pub fn new(primary_opcode: u8, encoding: OperandEncoding) -> Instruction {
-        match encoding {
-            OperandEncoding::OpcodeImmediate(reg, imm) => {
-                if let Operand::Register(_, None) = reg {
-                    let (encoded, rex) = EncodedRegister::from_register(reg);
-                    Instruction {
-                        prefix: Prefix { rex: Some(rex), mandatory_prefix: None, two_byte_opcode: None },
-                        primary_opcode: primary_opcode | u8::from(encoded.raw_value()),
-                        displacement: None,
-                        immediate: Some(imm),
-                    }
-                } else {
-                    // TODO: use result
-                    panic!("Invalid instruction");
-                }
-            },
-            OperandEncoding::ImmediateEncoding(imm) => todo!(),
-            OperandEncoding::MemoryImmediateEncoding() => todo!(),
-            OperandEncoding::MemoryRegisterEncoding() => todo!(),
-            OperandEncoding::RegisterMemoryEncoding() => todo!(),
-        }
-    }
-}
-
-#[derive(Debug)]
-#[bitenum(u3, exhaustive: true)]
-pub enum EncodedRegister {
-    AX = 0b000,
-    CX = 0b001,
-    DX = 0b010,
-    BX = 0b011,
-    /// Illegal argument for SIB byte but otherwise valid
-    /// when used in MOD/RM specifies there will be an SIB byte
-    SP = 0b100,
-    /// Used to indicate displacement only mode also 
-    BP = 0b101,
-    SI = 0b110,
-    DI = 0b111,
-}
-
-impl EncodedRegister {
-    pub fn from_registers(dst: Operand, src: Operand) -> ((EncodedRegister, EncodedRegister), RexPrefixEncoding) {
-        let rex = RexPrefixEncoding::from_operands(dst, src);
-        let (Operand::Register(dst, _), Operand::Register(src, _)) = (dst, src);
-        ((dst.encode_register(), src.encode_register()), rex)
-    }
-    
-    pub fn from_register(dst: Operand) -> (EncodedRegister, RexPrefixEncoding) {
-        let rex = RexPrefixEncoding::from_operands(dst);
-        let Operand::Register(dst, _) = dst;
-        (dst.encode_register(), rex)
-    }
-}
-
-/// Special mode that is enabled if the register is 101 (EBP) & MOD (addressing mode) = 00
-/// is a full byte.
-#[bitfield(u8)]
-struct ScaledIndexByte {
-    #[bits(5..=7, r)]
-    scale: u3,
-
-    #[bits(3..=5, r)]
-    register: EncodedRegister,
-
-    #[bits(0..=2, r)]
-    base: EncodedRegister,
-}
-
-/// This primarily specifies addressing mode, a source/destination register, and optionally an opcode extension
-#[bitfield(u8)]
-struct ModRM {
-    #[bits(6..=7, r)]
-    addressing_mode: AddressingMode,
-
-    #[bits(3..=5, r)]
-    register: ModRMRegister,
-
-    /// REX.B extends this to access upper registers
-    #[bits(0..=2, r)]
-    register_memory: EncodedRegister,
-}
-
-/// This is like an "enum" but the fields are overlapped
-/// which one is set will be based upon the opcode
-#[bitfield(u3)]
-struct ModRMRegister {
-    #[bits(0..=2, r)]
-    opcode_extension: u3,
-
-    /// REX.R extends this to access upper registers
-    #[bits(0..=2, r)]
-    register: EncodedRegister,
-}
-
-#[derive(Clone, Debug)]
-enum Displacement {
-    ZeroByteDisplacement,
-    OneByteDisplacement(u8),
-    FourByteDisplacement(u32),
-}
-
-#[derive(Clone, Debug)]
-enum Immediate {
-    Imm8(u8),
-    Imm32(u32),
-    /// possible but not with a displacement
-    Imm64(u64),
-}
 
 impl X86_64Codegen {
     fn current_offset(&self) -> usize {
@@ -411,14 +160,6 @@ impl X86_64Codegen {
         for i in 0..bytes.len() {
             self.bytes.push(bytes[i]);
         }
-    }
-
-    fn value_fits_in_i8(value: usize) -> bool {
-        value <= (i8::MAX as usize) || (((!value) & i8::MIN as usize) == 0)
-    }
-
-    fn value_fits_in_i32(value: usize) -> bool {
-        value <= (i32::MAX as usize) || (((!value) & i32::MIN as usize) == 0)
     }
 
     fn emit_displacement(&self, displacement: Option<usize>) {
