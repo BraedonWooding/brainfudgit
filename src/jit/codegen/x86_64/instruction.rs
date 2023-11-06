@@ -1,12 +1,10 @@
 use arbitrary_int::u3;
-use bitbybit::{bitfield, bitenum};
+use bitbybit::{bitenum, bitfield};
 use bitflags::bitflags;
-
-use super::operand::Operand;
 
 /// This is the output of any opcode and pretty much can be outputted directly to instruction stream
 /// only difference is that we don't encode Option<>
-/// 
+///
 /// Structure is: (everything is 1 byte unless otherwise specified)
 /// Prefix { MandatoryPrefix | TwoByteOpcodeFlag | REX } | PrimaryOpcode | SecondaryOpcode | MOD/RM | SIB | Displacement (1/4) | Immediate (1/4/8)
 /// this would give a max length of Prefix (3), Primary & Secondary (2), ModRM + SIB + Displacement (6) + Immediate (4, can't have 8 & displacement)
@@ -17,13 +15,12 @@ pub struct Instruction {
 
     pub primary_opcode: u8,
     pub secondary_opcode: Option<u8>,
-    pub mod_rm: ModRM,
+    pub mod_rm: Option<ModRM>,
 
     pub sib: Option<ScaledIndexByte>,
     pub displacement: Option<Displacement>,
     pub immediate: Option<Immediate>,
 }
-
 
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
@@ -41,19 +38,41 @@ pub struct Prefix {
     pub rex: Option<RexPrefixEncoding>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Displacement {
     ZeroByteDisplacement,
     OneByteDisplacement(u8),
     FourByteDisplacement(u32),
 }
 
-#[derive(Clone, Debug)]
+impl Displacement {
+    pub fn coerce_to_fourbytes(&self) -> Displacement {
+        match *self {
+            Displacement::ZeroByteDisplacement => Displacement::FourByteDisplacement(0),
+            Displacement::OneByteDisplacement(i) => {
+                Displacement::FourByteDisplacement(u32::from(i))
+            }
+            Displacement::FourByteDisplacement(i) => Displacement::FourByteDisplacement(i),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum Immediate {
     Imm8(u8),
     Imm32(u32),
     /// possible but not with a displacement
     Imm64(u64),
+}
+
+impl Immediate {
+    pub fn is_zero(&self) -> bool {
+        return match *self {
+            Immediate::Imm8(i) => i == 0,
+            Immediate::Imm32(i) => i == 0,
+            Immediate::Imm64(i) => i == 0,
+        };
+    }
 }
 
 /// The addressing mode of the registers, this is the first 2 bits of the ModRM
@@ -70,6 +89,7 @@ pub enum AddressingMode {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Debug)]
     pub struct RexPrefixEncoding : u8 {
         const Base  = 0b0100_000;
         /// Wide instruction (64 bit instead of 32)
@@ -83,60 +103,49 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
-#[bitenum(u3, exhaustive: true)]
-pub enum EncodedRegister {
-    AX = 0b000,
-    CX = 0b001,
-    DX = 0b010,
-    BX = 0b011,
-    /// Illegal argument for SIB byte but otherwise valid
-    /// when used in MOD/RM specifies there will be an SIB byte
-    SP = 0b100,
-    /// Used to indicate displacement only mode also 
-    BP = 0b101,
-    SI = 0b110,
-    DI = 0b111,
-}
-
 /// Special mode that is enabled if the register is 101 (EBP) & MOD (addressing mode) = 00
 /// is a full byte.
-/// 
+///
 /// Defined as displacement (as usual) + base + index * scale.
-#[bitfield(u8)]
+#[bitfield(u8, default: 0)]
+#[derive(Debug)]
 pub struct ScaledIndexByte {
-    #[bits(5..=7, r)]
+    #[bits(5..=7, rw)]
     pub scale: u3,
 
-    #[bits(3..=5, r)]
-    pub index: EncodedRegister,
+    #[bits(3..=5, rw)]
+    pub index: u3,
 
-    #[bits(0..=2, r)]
-    pub base: EncodedRegister,
+    #[bits(0..=2, rw)]
+    pub base: u3,
 }
 
 /// This primarily specifies addressing mode, a source/destination register, and optionally an opcode extension
-#[bitfield(u8)]
+/// Default is 0b11 since it's the RegisterDirect.
+#[bitfield(u8, default: 0b11_000_000)]
+#[derive(Debug)]
 pub struct ModRM {
-    #[bits(6..=7, r)]
+    #[bits(6..=7, rw)]
     pub addressing_mode: AddressingMode,
 
-    #[bits(3..=5, r)]
-    pub register: ModRMRegister,
-
     /// REX.B extends this to access upper registers
-    #[bits(0..=2, r)]
-    pub register_memory: EncodedRegister,
-}
+    #[bits(0..=2, rw)]
+    pub register_memory: u3,
 
-/// This is like an "enum" but the fields are overlapped
-/// which one is set will be based upon the opcode
-#[bitfield(u3)]
-pub struct ModRMRegister {
-    #[bits(0..=2, r)]
+    #[bits(3..=5, rw)]
     pub opcode_extension: u3,
 
     /// REX.R extends this to access upper registers
-    #[bits(0..=2, r)]
-    pub register: EncodedRegister,
+    #[bits(3..=5, rw)]
+    pub register: u3,
+}
+
+impl ModRM {
+    pub fn new_if_opcode(opt_opcode_extension: Option<u3>) -> Option<ModRM> {
+        if let Some(opcode_extension) = opt_opcode_extension {
+            Some(ModRM::default().with_opcode_extension(opcode_extension))
+        } else {
+            None
+        }
+    }
 }
