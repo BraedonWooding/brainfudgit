@@ -4,9 +4,9 @@ use arbitrary_int::u3;
 pub enum RegisterAccess {
     LowByte,
     HighByte,
-    LowTwoBytes,
-    LowFourBytes,
-    LowEightBytes,
+    Word,
+    DoubleWord,
+    QuadWord,
 }
 
 pub type Register = (Registers, RegisterAccess);
@@ -45,7 +45,7 @@ impl Registers {
                 }
                 String::from(self.name) + "H"
             }
-            RegisterAccess::LowTwoBytes => {
+            RegisterAccess::Word => {
                 String::from(self.name)
                     + match self.index {
                         // "A..D"
@@ -57,7 +57,7 @@ impl Registers {
                         _ => unreachable!(),
                     }
             }
-            RegisterAccess::LowFourBytes => {
+            RegisterAccess::DoubleWord => {
                 String::from(match self.index {
                     // "A..D" & "SP..DI"
                     0b0000..=0b0111 => "E",
@@ -73,7 +73,7 @@ impl Registers {
                         _ => unreachable!(),
                     }
             }
-            RegisterAccess::LowEightBytes => {
+            RegisterAccess::QuadWord => {
                 String::from(match self.index {
                     // "A..D" & "SP..DI"
                     0b0000..=0b0111 => "R",
@@ -86,14 +86,22 @@ impl Registers {
     }
 }
 
+/// Accumulator
 pub const A: Registers = Registers::new("A", true, 0b0000);
+/// Base index
 pub const B: Registers = Registers::new("B", true, 0b0001);
+/// Counter
 pub const C: Registers = Registers::new("C", true, 0b0010);
+/// Data / extended accumulator
 pub const D: Registers = Registers::new("D", true, 0b0011);
 
+/// Stack pointer
 pub const SP: Registers = Registers::new("SP", false, 0b0100);
+/// Base pointer
 pub const BP: Registers = Registers::new("BP", false, 0b0101);
+/// Stream index
 pub const SI: Registers = Registers::new("SI", false, 0b0110);
+/// Destination index
 pub const DI: Registers = Registers::new("DI", false, 0b0111);
 
 pub const R8: Registers = Registers::new("R8", false, 0b1000);

@@ -2,7 +2,7 @@ use arbitrary_int::u3;
 
 use super::{
     instruction::{Immediate, Instruction},
-    operand_encoding::{InstructionInput, MemoryBaseRegister, OperandEncoding},
+    operand_encoding::{InstructionInput, MemoryBaseRegister, Offset, OperandEncoding},
 };
 
 fn imm_opcode(imm: Immediate, imm32_opcode: u8, imm8_opcode: u8) -> u8 {
@@ -11,6 +11,58 @@ fn imm_opcode(imm: Immediate, imm32_opcode: u8, imm8_opcode: u8) -> u8 {
         Immediate::Imm8(_) => return imm8_opcode,
         // Not supported
         Immediate::Imm64(_) => unreachable!(),
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+#[repr(u8)]
+pub enum JumpOperator {
+    /// JO
+    JumpIfOverflow = 0,
+    /// JNO
+    JumpIfNotOverflow = 1,
+    /// JB
+    JumpIfBelow = 2,
+    /// JNE
+    JumpIfNotBelow = 3,
+    /// JZ
+    JumpIfZero = 4,
+    /// JNZ
+    JumpIfNotZero = 5,
+    /// JBE
+    JumpIfBelowOrEqual = 6,
+    /// JA
+    JumpIfAbove = 7,
+    /// JS
+    JumpIfSign = 8,
+    /// JNS
+    JumpIfNotSign = 9,
+    /// JP
+    JumpIfParity = 10,
+    /// JNP
+    JumpIfNotParity = 11,
+    /// JL
+    JumpIfLess = 12,
+    /// JGE
+    JumpIfGreaterOrEqual = 13,
+    /// JLE
+    JumpIfLessOrEqual = 14,
+    /// JG
+    JumpIfGreater = 15,
+}
+
+pub fn jump_op(jump: JumpOperator, op: OperandEncoding) -> Instruction {
+    match op {
+        OperandEncoding::Address(Offset::Immediate(Immediate::Imm8(_))) => {
+            Instruction::new(InstructionInput::new(0x70 + jump as u8), op)
+        }
+        OperandEncoding::Address(Offset::Immediate(_)) => Instruction::new(
+            InstructionInput::new(0x80 + jump as u8).with_two_byte_opcode_prefix(),
+            op,
+        ),
+        _ => {
+            unreachable!("{:?} is not a valid encoding type for {:?}", op, jump)
+        }
     }
 }
 
@@ -34,7 +86,7 @@ fn math_op(
         OperandEncoding::RegisterMemory(_, _) => {
             Instruction::new(InstructionInput::new(opcode_mr + 2), op)
         }
-        OperandEncoding::OpcodeImmediate(_, _) => {
+        _ => {
             unreachable!("{:?} is not a valid encoding type for {}", op, name)
         }
     }
@@ -97,80 +149,8 @@ pub fn mov(op: OperandEncoding) -> Instruction {
         OperandEncoding::MemoryRegister(_, _) => Instruction::new(InstructionInput::new(0x89), op),
         OperandEncoding::RegisterMemory(_, _) => Instruction::new(InstructionInput::new(0x8B), op),
         OperandEncoding::OpcodeImmediate(_, _) => Instruction::new(InstructionInput::new(0xB8), op),
+        _ => {
+            unreachable!("{:?} is not a valid encoding type for {}", op, "mov")
+        }
     }
 }
-
-// pub fn encode(op: Opcode, dst: Operand, src: Operand) {
-//     // Optimizations
-//     if op == Opcode::Mov {
-//         if let (Operand::Register(reg), Operand::Immediate(imm)) = (dst, src) {
-//             if imm == 0 {
-//                 // MOV(r, 0) = XOR(r, r) since it's better pipelined
-//                 return encode(Opcode::Xor, dst, Operand::Register(reg));
-//             } else {
-//                 // MOV(r, imm) = B8 + r since byte instruction no opcode
-//                 if value_fits_in_i32(imm) {
-//                     // TODO: This is messy but we want to basically remove the :W since we are emitting a 32 bit imm
-//                     // self.emit8(
-//                     //     (RexPrefixEncoding::from_operand(reg) & !RexPrefixEncoding::W).as_u8(),
-//                     // );
-//                     // self.emit8(0xB8 | reg.encode_register());
-//                     // self.emit32(imm);
-//                 } else {
-//                     // We emit .W to indicate it's a large 64 bit imm
-//                     // self.emit8(RexPrefixEncoding::from_operand(reg).as_u8());
-//                     // self.emit8(0xB8 | reg.encode_register());
-//                     // self.emit64(imm);
-//                 }
-//                 return;
-//             }
-//         }
-//         if let (Operand::Register(reg1), Operand::Register(reg2)) = (dst, src) {
-//             // MOV(r, r) always is a no-op
-//             if reg1 == reg2 {
-//                 return;
-//             }
-//         }
-//     }
-
-//     let (primaryOpcode, opcodeExtension) = match (dst, src) {
-//         // (Operand::Register(_, Some(_)), Operand::Register(_, None)) => match op {
-//         //     Opcode::Add => (0x01, None),
-//         //     Opcode::Sub => (0x29, None),
-//         //     Opcode::Mov => (0x89, None),
-//         //     Opcode::Cmp => (0x39, None),
-//         //     Opcode::Xor => todo!(),
-//         // },
-//         // (Operand::Register(_, None), Operand::Register(_, Some(_))) => match op {
-//         //     Opcode::Add => (0x03, None),
-//         //     Opcode::Sub => (0x2B, None),
-//         //     Opcode::Mov => (0x8B, None),
-//         //     Opcode::Cmp => (0x3B, None),
-//         //     Opcode::Xor => todo!(),
-//         // },
-//         // (Operand::Register(_, _), Operand::Immediate(imm)) => {
-//         //     if value_fits_in_i8(imm) {
-//         //         // imm8
-//         //         match op {
-//         //             Opcode::Add => (0x83, Some(0)),
-//         //             Opcode::Sub => (0x83, Some(5)),
-//         //             Opcode::Mov => (0xC7, Some(0)),
-//         //             Opcode::Cmp => todo!(),
-//         //             Opcode::Xor => todo!(),
-//         //         }
-//         //     } else if value_fits_in_i32(imm) {
-//         //         // imm32
-//         //         match op {
-//         //             Opcode::Add => (0x81, Some(0)),
-//         //             Opcode::Sub => (0x81, Some(5)),
-//         //             Opcode::Mov => (0xC7, Some(0)),
-//         //             Opcode::Cmp => todo!(),
-//         //             Opcode::Xor => todo!(),
-//         //         }
-//         //     } else {
-//         //         unreachable!()
-//         //     }
-//         // }
-//         _ => unreachable!(),
-//     };
-// }

@@ -31,32 +31,6 @@ pub struct ScaledIndex {
     pub displacement: Displacement,
 }
 
-// impl Register {
-//     pub fn encode_register(&self) -> EncodedRegister {
-//         // https://wiki.osdev.org/X86-64_Instruction_Encoding#Registers
-//         // X.Reg, in this case our encoded register is just encoding the Y part of X.YYY
-//         // we'll need to set REX flags X & B when using dest & src registers
-//         return EncodedRegister::new_with_raw_value(u3::from((*self as u8) & 0x7));
-//     }
-// }
-
-// impl EncodedRegister {
-//     pub fn from_registers(
-//         dst: Operand,
-//         src: Operand,
-//     ) -> ((EncodedRegister, EncodedRegister), RexPrefixEncoding) {
-//         let rex = RexPrefixEncoding::from_operands(dst, src);
-//         let (Operand::Register(dst, _), Operand::Register(src, _)) = (dst, src);
-//         ((dst.encode_register(), src.encode_register()), rex)
-//     }
-
-//     pub fn from_register(dst: Operand) -> (EncodedRegister, RexPrefixEncoding) {
-//         let rex = RexPrefixEncoding::from_operand(dst);
-//         let Operand::Register(dst, _) = dst;
-//         (dst.encode_register(), rex)
-//     }
-// }
-
 impl AddressingMode {
     pub fn from_displacement(displacement: Option<Displacement>) -> AddressingMode {
         match displacement {
@@ -68,10 +42,12 @@ impl AddressingMode {
     }
 }
 
-impl RexPrefixEncoding {
-    pub fn as_u8(&self) -> u8 {
-        self.bits() as u8
-    }
+#[derive(Clone, Debug)]
+pub enum Offset {
+    Immediate(Immediate),
+    // note; I'm not adding other forms like m16:32, and ptr16:32
+    // ptr16 is deprecated in x86_64, and m16 is confusing.
+    // I'm avoiding it since I don't need far calls
 }
 
 /// The main reasons for this kind of design is the following observations
@@ -103,12 +79,17 @@ pub enum OperandEncoding {
 
     /// "OI", Operand 1 = opcode + rd (w), Operand 2 = imm8/16/32/64
     OpcodeImmediate(Register, Immediate),
-    // TODO: FD & TD
+
+    /// "D", Operand 1 = Offset
+    /// stores an address that's relative to the next instruction or an absolute address (in some cases)
+    Address(Offset),
+    // TODO: FD & TD, and more...
 }
 
 pub struct InstructionInput {
     pub mandatory_prefix: Option<u8>,
     pub primary_opcode: u8,
+    pub two_byte_opcode_prefix: bool,
     pub secondary_opcode: Option<u8>,
     pub opcode_extension: Option<u3>,
 }
@@ -118,6 +99,7 @@ impl InstructionInput {
         InstructionInput {
             mandatory_prefix: None,
             primary_opcode,
+            two_byte_opcode_prefix: false,
             secondary_opcode: None,
             opcode_extension: None,
         }
@@ -130,6 +112,12 @@ impl InstructionInput {
 
     pub fn with_secondary(mut self, secondary_opcode: u8) -> InstructionInput {
         self.secondary_opcode = Some(secondary_opcode);
+        self.two_byte_opcode_prefix = true;
+        self
+    }
+
+    pub fn with_two_byte_opcode_prefix(mut self) -> InstructionInput {
+        self.two_byte_opcode_prefix = true;
         self
     }
 }
@@ -153,7 +141,7 @@ impl Instruction {
         // but for 64 bit we just need to append a .W to write to the 64 bit register
         // TODO: https://wiki.osdev.org/X86-64_Instruction_Encoding#Operand-size_and_address-size_override_prefix
 
-        if access == RegisterAccess::LowEightBytes {
+        if access == RegisterAccess::QuadWord {
             // some instructions don't require this, in whcih case we'll clean this up when outputting the instruction
             // to the instruction stream, it's okay for us to output this regardless it's just an optimization (saving bytes)
             self.set_rex(RexPrefixEncoding::W);
@@ -220,7 +208,7 @@ impl Instruction {
                         self.set_rex(RexPrefixEncoding::B);
                     }
 
-                    if base_access == RegisterAccess::LowEightBytes {
+                    if base_access == RegisterAccess::QuadWord {
                         self.set_rex(RexPrefixEncoding::W);
                     }
 
@@ -257,7 +245,7 @@ impl Instruction {
                         self.set_rex(RexPrefixEncoding::X);
                     }
 
-                    if index_access == RegisterAccess::LowEightBytes {
+                    if index_access == RegisterAccess::QuadWord {
                         self.set_rex(RexPrefixEncoding::W);
                     }
                 } else {
@@ -277,17 +265,15 @@ impl Instruction {
     }
 
     pub fn new(input: InstructionInput, encoding: OperandEncoding) -> Instruction {
-        let two_byte_opcode = if let Some(_) = input.secondary_opcode {
-            Some(TwoByteOpcode::Value)
-        } else {
-            None
-        };
-
         let mut instruction = Instruction {
             prefix: Prefix {
                 rex: None,
                 mandatory_prefix: input.mandatory_prefix,
-                two_byte_opcode,
+                two_byte_opcode: if input.two_byte_opcode_prefix {
+                    Some(TwoByteOpcode::Value)
+                } else {
+                    None
+                },
             },
             primary_opcode: input.primary_opcode,
             secondary_opcode: input.secondary_opcode,
@@ -312,9 +298,9 @@ impl Instruction {
                         "We don't support access to AH when using OperandEncoding::Immediate"
                     ),
                     // AX, EAX, RAX
-                    RegisterAccess::LowTwoBytes
-                    | RegisterAccess::LowFourBytes
-                    | RegisterAccess::LowEightBytes => 1,
+                    RegisterAccess::Word
+                    | RegisterAccess::DoubleWord
+                    | RegisterAccess::QuadWord => 1,
                 };
 
                 instruction.primary_opcode += opcode_offset;
@@ -330,6 +316,9 @@ impl Instruction {
             | OperandEncoding::RegisterMemory(reg, mem_reg) => {
                 instruction.encode_memregister(mem_reg);
                 instruction.encode_register(reg, true);
+            }
+            OperandEncoding::Address(Offset::Immediate(imm)) => {
+                instruction.encode_immediate(imm);
             }
         }
 

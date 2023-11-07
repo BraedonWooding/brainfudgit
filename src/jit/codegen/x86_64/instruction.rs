@@ -1,6 +1,10 @@
+use std::io::{self, BufWriter, ErrorKind, Write};
+
 use arbitrary_int::u3;
 use bitbybit::{bitenum, bitfield};
 use bitflags::bitflags;
+
+use num_traits::ops::bytes::ToBytes;
 
 /// This is the output of any opcode and pretty much can be outputted directly to instruction stream
 /// only difference is that we don't encode Option<>
@@ -103,12 +107,19 @@ bitflags! {
     }
 }
 
+impl RexPrefixEncoding {
+    pub fn as_u8(&self) -> u8 {
+        self.bits() as u8
+    }
+}
+
 /// Special mode that is enabled if the register is 101 (EBP) & MOD (addressing mode) = 00
 /// is a full byte.
 ///
 /// Defined as displacement (as usual) + base + index * scale.
 #[bitfield(u8, default: 0)]
 #[derive(Debug)]
+#[repr(C)]
 pub struct ScaledIndexByte {
     #[bits(5..=7, rw)]
     pub scale: u3,
@@ -124,6 +135,7 @@ pub struct ScaledIndexByte {
 /// Default is 0b11 since it's the RegisterDirect.
 #[bitfield(u8, default: 0b11_000_000)]
 #[derive(Debug)]
+#[repr(C)]
 pub struct ModRM {
     #[bits(6..=7, rw)]
     pub addressing_mode: AddressingMode,
@@ -146,6 +158,83 @@ impl ModRM {
             Some(ModRM::default().with_opcode_extension(opcode_extension))
         } else {
             None
+        }
+    }
+}
+
+impl Instruction {
+    fn emit_opt_byte<const COUNT: usize, T: ToBytes<Bytes = [u8; COUNT]>>(
+        writer: &mut BufWriter<&mut [u8]>,
+        value: Option<T>,
+    ) -> io::Result<usize> {
+        if let Some(value) = value {
+            writer.write(&ToBytes::to_le_bytes(&value))
+        } else {
+            Ok(0)
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        let mut buf = [0; 15];
+        self.read(&mut buf)
+            .expect("We pass a valid buffer we should expect a valid result here.")
+    }
+
+    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.len() < 15 {
+            return Err(io::Error::new(
+                ErrorKind::Interrupted,
+                "Requires at-least 15 bytes of buffer",
+            ));
+        } else {
+            let mut writer = BufWriter::new(buf);
+            let mut count = 0;
+
+            // emit prefixes
+            count += Instruction::emit_opt_byte(&mut writer, self.prefix.mandatory_prefix)?;
+            count += Instruction::emit_opt_byte(
+                &mut writer,
+                self.prefix
+                    .two_byte_opcode
+                    .map(|opcode_flag| opcode_flag as u8),
+            )?;
+            count +=
+                Instruction::emit_opt_byte(&mut writer, self.prefix.rex.map(|rex| rex.as_u8()))?;
+
+            // emit opcode/s
+            count += Instruction::emit_opt_byte(&mut writer, Some(self.primary_opcode))?;
+            count += Instruction::emit_opt_byte(&mut writer, self.secondary_opcode)?;
+
+            // modrm & sib
+            count +=
+                Instruction::emit_opt_byte(&mut writer, self.mod_rm.map(|modrm| modrm.raw_value))?;
+            count += Instruction::emit_opt_byte(&mut writer, self.sib.map(|sib| sib.raw_value))?;
+
+            // displacement & immediate
+            if let Some(displacement) = self.displacement {
+                count += match displacement {
+                    Displacement::ZeroByteDisplacement => 0,
+                    Displacement::OneByteDisplacement(byte) => {
+                        Instruction::emit_opt_byte(&mut writer, Some(byte))?
+                    }
+                    Displacement::FourByteDisplacement(double_word) => {
+                        Instruction::emit_opt_byte(&mut writer, Some(double_word))?
+                    }
+                }
+            }
+            if let Some(immediate) = self.immediate {
+                count += match immediate {
+                    Immediate::Imm8(byte) => Instruction::emit_opt_byte(&mut writer, Some(byte))?,
+                    Immediate::Imm32(double_word) => {
+                        Instruction::emit_opt_byte(&mut writer, Some(double_word))?
+                    }
+                    Immediate::Imm64(quad_word) => {
+                        Instruction::emit_opt_byte(&mut writer, Some(quad_word))?
+                    }
+                }
+            }
+
+            Ok(count)
         }
     }
 }

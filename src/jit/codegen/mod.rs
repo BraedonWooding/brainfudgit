@@ -1,7 +1,9 @@
 pub mod x86_64;
 
 pub trait CodeGen {
-    fn compile(executable: Vec<u8>, bytecode: Vec<ByteCode>);
+    fn compile(&mut self, executable: Vec<u8>, bytecode: Vec<ByteCode>);
+
+    fn new() -> Self;
 }
 
 use crate::bytecode::ByteCode;

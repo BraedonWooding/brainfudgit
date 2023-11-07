@@ -3,10 +3,11 @@ extern crate thiserror;
 
 pub mod bytecode;
 pub mod interpreter;
+#[allow(dead_code)]
+pub mod jit;
 pub mod lexer;
 pub mod optimizer;
 pub mod parser;
-pub mod jit;
 
 use std::{
     collections::HashSet,
@@ -22,8 +23,10 @@ use lexer::lexer::Lexer;
 use crate::{
     bytecode::bytecode::to_bytecode,
     interpreter::{
-        ast_interpreter::AstInterpreter, bytecode_interpreter::ByteCodeInterpreter, Runtime, mir_interpreter::MirInterpreter,
-    }, optimizer::optimize,
+        ast_interpreter::AstInterpreter, bytecode_interpreter::ByteCodeInterpreter,
+        mir_interpreter::MirInterpreter, Runtime,
+    },
+    optimizer::optimize,
 };
 
 /// Brainf**k compiler/optimizer/JIT/AOT/interpreter
@@ -76,7 +79,8 @@ enum Commands {
 fn main() -> Result<(), ()> {
     let args = Args::parse();
     let commands: HashSet<Commands> = HashSet::from_iter(args.commands.into_iter());
-    let mut optimizations: HashSet<Optimizations> = HashSet::from_iter(args.optimizations.into_iter());
+    let mut optimizations: HashSet<Optimizations> =
+        HashSet::from_iter(args.optimizations.into_iter());
     // TODO: Loop through all enum variants to avoid this duplication
     if args.all_optimizations {
         optimizations.insert(Optimizations::CommentBlock);
@@ -145,7 +149,7 @@ fn main() -> Result<(), ()> {
             now.elapsed()
         );
     }
-    
+
     println!("{} {:?}", "Starting optimizations".blue(), &optimizations);
     now = Instant::now();
     let optimized_program = optimize(&program, &optimizations);
@@ -172,11 +176,7 @@ fn main() -> Result<(), ()> {
         );
     }
 
-    println!(
-        "{} {:?}",
-        "Starting bytecode".blue(),
-        optimizations
-    );
+    println!("{} {:?}", "Starting bytecode".blue(), optimizations);
     now = Instant::now();
     let bytecode = to_bytecode(&optimized_program);
     println!(

@@ -1,8 +1,7 @@
 pub mod codegen;
 
-use std::{collections::HashMap, ffi::c_void, mem};
-
-use crate::{optimizer::MirBasicBlock, bytecode::ByteCode};
+use crate::{bytecode::ByteCode, optimizer::MirBasicBlock};
+use std::{ffi::c_void, mem};
 
 pub enum JitMode {
     /// All: Fully compiles everything to ASM, works like an AOT mode
@@ -31,22 +30,21 @@ pub struct JitCompiler<'a> {
 }
 
 impl<'a> JitCompiler<'a> {
-    pub fn jit_block(&self, block: &MirBasicBlock) {
-
-    }
+    pub fn jit_block(&self, block: &MirBasicBlock) {}
 
     extern "C" fn jit_callback(&mut self, jit_block_id: usize) {
         let block = self.blocks.get(jit_block_id).expect("Invalid jit block id");
 
         match block {
             JitBlock::Compiled(executable) => {
-                let func: extern "C" fn() -> c_void = unsafe { mem::transmute(executable.as_ptr()) };
+                let func: extern "C" fn() -> c_void =
+                    unsafe { mem::transmute(executable.as_ptr()) };
                 func();
-            },
+            }
             JitBlock::Pending(bytecode) => {
                 let compiled_block = todo!();
                 // self.blocks[jit_block_id] = &JitBlock::Compiled(compiled_block);
-            },
+            }
         }
     }
 }
