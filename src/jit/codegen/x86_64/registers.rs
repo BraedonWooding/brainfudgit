@@ -87,28 +87,36 @@ impl Registers {
 }
 
 /// Accumulator
-pub const A: Registers = Registers::new("A", true, 0b0000);
+pub const ACCUMULATOR_REG: Registers = Registers::new("A", true, 0b0000);
 /// Base index
-pub const B: Registers = Registers::new("B", true, 0b0001);
+pub const BASE_INDEX_REG: Registers = Registers::new("B", true, 0b0001);
 /// Counter
-pub const C: Registers = Registers::new("C", true, 0b0010);
+const _C: Registers = Registers::new("C", true, 0b0010);
 /// Data / extended accumulator
-pub const D: Registers = Registers::new("D", true, 0b0011);
+const _D: Registers = Registers::new("D", true, 0b0011);
 
 /// Stack pointer
-pub const SP: Registers = Registers::new("SP", false, 0b0100);
+pub const STACK_POINTER: Registers = Registers::new("SP", false, 0b0100);
 /// Base pointer
-pub const BP: Registers = Registers::new("BP", false, 0b0101);
+pub const BASE_POINTER: Registers = Registers::new("BP", false, 0b0101);
 /// Stream index
-pub const SI: Registers = Registers::new("SI", false, 0b0110);
+const _SI: Registers = Registers::new("SI", false, 0b0110);
 /// Destination index
-pub const DI: Registers = Registers::new("DI", false, 0b0111);
+const _DI: Registers = Registers::new("DI", false, 0b0111);
 
-pub const R8: Registers = Registers::new("R8", false, 0b1000);
-pub const R9: Registers = Registers::new("R9", false, 0b1001);
-pub const R10: Registers = Registers::new("R10", false, 0b1010);
-pub const R11: Registers = Registers::new("R11", false, 0b1011);
-pub const R12: Registers = Registers::new("R12", false, 0b1100);
-pub const R13: Registers = Registers::new("R13", false, 0b1101);
-pub const R14: Registers = Registers::new("R14", false, 0b1110);
-pub const R15: Registers = Registers::new("R15", false, 0b1111);
+const _R8: Registers = Registers::new("R8", false, 0b1000);
+const _R9: Registers = Registers::new("R9", false, 0b1001);
+const _R10: Registers = Registers::new("R10", false, 0b1010);
+const _R11: Registers = Registers::new("R11", false, 0b1011);
+const _R12: Registers = Registers::new("R12", false, 0b1100);
+pub const GPR_13: Registers = Registers::new("R13", false, 0b1101);
+const _R14: Registers = Registers::new("R14", false, 0b1110);
+const _R15: Registers = Registers::new("R15", false, 0b1111);
+
+pub const SPL: Register = (STACK_POINTER, RegisterAccess::LowByte);
+pub const SP: Register = (STACK_POINTER, RegisterAccess::Word);
+
+pub const BP: Register = (BASE_POINTER, RegisterAccess::Word);
+
+pub const RSP: Register = (STACK_POINTER, RegisterAccess::QuadWord);
+pub const R15: Register = (_R15, RegisterAccess::QuadWord);

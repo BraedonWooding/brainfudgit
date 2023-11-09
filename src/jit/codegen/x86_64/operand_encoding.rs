@@ -168,7 +168,7 @@ impl Instruction {
                     self.set_rex(RexPrefixEncoding::B);
                 }
 
-                if (reg == registers::BP || reg == registers::R13)
+                if (reg.name == "BP" || reg.name == "R13")
                     && displacement == Displacement::ZeroByteDisplacement
                 {
                     // in x86 this causes us to use RIP/EIP instead if we are in Mod == 00 (ZeroByteDisplacement)
@@ -194,7 +194,7 @@ impl Instruction {
                 let mut sib = ScaledIndexByte::default();
 
                 if let Some((base, base_access)) = base {
-                    if base == registers::BP || base == registers::R13 {
+                    if base == registers::BASE_POINTER || base == registers::GPR_13 {
                         // these are special registers that cause the SIB byte to be outputted
                         // outside of 0 byte displacement values they are encoded into the SIB
                         // but for 0 byte displacement values it means *no* base so if we have stated
@@ -216,7 +216,7 @@ impl Instruction {
                     self.set_modrm(|modrm| {
                         modrm
                             // enable SIB (this register or R13 if REX.W is enabled will cause it to read the SIB byte)
-                            .with_register_memory(registers::SP.as_u3())
+                            .with_register_memory(registers::STACK_POINTER.as_u3())
                             .with_addressing_mode(AddressingMode::from_displacement(Some(
                                 displacement,
                             )))
@@ -224,20 +224,20 @@ impl Instruction {
                 } else {
                     // NOTE: This is a special register to designate there is no base
                     //       we can also use R13 to designate this.
-                    sib = sib.with_base(registers::BP.as_u3());
+                    sib = sib.with_base(registers::BASE_POINTER.as_u3());
                     // This only works if the mode in the instruction is 00 (for zero displacement)
                     // but the displacement is actually 4 bytes (no version for 1 byte) so we coerce
                     displacement = displacement.coerce_to_fourbytes();
                     self.set_modrm(|modrm| {
                         modrm
                             // enable SIB (this register or R13 if REX.W is enabled will cause it to read the SIB byte)
-                            .with_register_memory(registers::SP.as_u3())
+                            .with_register_memory(registers::SP.0.as_u3())
                             .with_addressing_mode(AddressingMode::ZeroByteDisplacement)
                     })
                 }
 
                 if let Some(((index, index_access), _)) = index {
-                    if index == registers::SP {
+                    if index == registers::STACK_POINTER {
                         panic!("SP is not a valid register to use as an index");
                     }
 
@@ -250,7 +250,7 @@ impl Instruction {
                     }
                 } else {
                     // SP is a special register to designate that there is no index
-                    sib = sib.with_index(registers::SP.as_u3());
+                    sib = sib.with_index(registers::STACK_POINTER.as_u3());
                 }
 
                 self.sib = Some(sib);
@@ -304,7 +304,7 @@ impl Instruction {
                 };
 
                 instruction.primary_opcode += opcode_offset;
-                instruction.encode_register((registers::A, access), false);
+                instruction.encode_register((registers::ACCUMULATOR_REG, access), false);
                 instruction.encode_immediate(imm);
             }
             OperandEncoding::MemoryImmediate(mem_reg, imm) => {

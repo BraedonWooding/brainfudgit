@@ -1,4 +1,6 @@
-use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
+
+use brainfudgit::asm_x86;
 
 use crate::jit::codegen::CodeGen;
 
@@ -119,77 +121,31 @@ impl X86_64Codegen {
     // we more accurately translate it to this: if (*dp != 0) do {  } while (*dp != 0);
     // which avoids the double jump on the while loop.
     fn while_loop<T: FnOnce(&mut X86_64Codegen) -> ()>(&mut self, emit_loop: T) {
-        let mut loop_start = Label::new(self.instructions.clone());
-        let mut loop_end = Label::new(self.instructions.clone());
+        asm_x86! {
+            cmp [SPL], 0;
+            jumpIfZero loop_end;
+            loop_start:
 
-        self.push(ops::cmp(OperandEncoding::MemoryImmediate(
-            MemoryBaseRegister::DisplacementOnly(
-                (registers::SP, RegisterAccess::LowByte),
-                Displacement::ZeroByteDisplacement,
-            ),
-            Immediate::Imm8(0),
-        )));
-        // JZ loop_end
-        loop_end.add_jump(JumpOperator::JumpIfZero);
+            $emit_loop(self);
 
-        // loop_start:
-        loop_start.current_offset_as_label();
-
-        emit_loop(self);
-
-        self.push(ops::cmp(OperandEncoding::MemoryImmediate(
-            MemoryBaseRegister::DisplacementOnly(
-                (registers::SP, RegisterAccess::LowByte),
-                Displacement::ZeroByteDisplacement,
-            ),
-            Immediate::Imm8(0),
-        )));
-        // JNZ loop_start
-        loop_start.add_jump(JumpOperator::JumpIfNotZero);
-
-        // loop_end:
-        loop_end.current_offset_as_label();
+            cmp [SPL], 0;
+            jumpIfNotZero loop_start;
+            loop_end:
+        };
     }
 
     fn windows_call(&mut self) {
-        /*
-        macro! {
-            label loop_start
-            label loop_end
+        asm_x86! {
+            // For a windows call we need to make 32 bytes worth of stack space and 8 bytes to align to 16 byte boundary
+            sub RSP, 32 + 8;
 
-            sub RSP, (32 + 8)
+            // TODO:
+            // self.mov(...)
+            // self.call(...)
 
-            add RSP, (32 + 8)
-
-            // if (*dp != 0)
-            cmp [SPL], 0
-            jumpIfZero loop_end
-
-            loop_start:
-            // do
-            ${emit_loop(self);}
-
-            // while(*dp != 0)
-            cmp [SPL], 0
-            jumpIfNotZero loop_start
-            loop_end:
-        }
-         */
-
-        // For a windows call we need to make 32 bytes worth of stack space and 8 bytes to align to 16 byte boundary
-        self.push(ops::sub(OperandEncoding::MemoryImmediate(
-            MemoryBaseRegister::Register((registers::SP, RegisterAccess::QuadWord)),
-            Immediate::Imm8(32 + 8),
-        )));
-
-        // self.mov(...)
-        // self.call(...)
-
-        // Clean up the stack from what we pushed above
-        self.push(ops::add(OperandEncoding::MemoryImmediate(
-            MemoryBaseRegister::Register((registers::SP, RegisterAccess::QuadWord)),
-            Immediate::Imm8(32 + 8),
-        )));
+            // Clean up the stack from what we pushed above
+            add RSP, 32 + 8;
+        };
     }
 }
 
