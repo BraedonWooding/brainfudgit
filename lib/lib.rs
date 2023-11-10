@@ -94,6 +94,9 @@ fn encode_operands(operands: Vec<Operand>) -> proc_macro2::TokenStream {
         [Operand::Ident(ident), Operand::Expr(expr)] => quote! {
             OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::Imm8(#expr))
         },
+        [Operand::Ident(ident), Operand::Ident(expr)] => quote! {
+            OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::Imm8(#expr))
+        },
         [Operand::MemoryRegister(ident), Operand::Expr(expr)] => quote! {
             OperandEncoding::MemoryImmediate(MemoryBaseRegister::DisplacementOnly(registers::#ident, Displacement::ZeroByteDisplacement), Immediate::Imm8(#expr))
         },
@@ -102,6 +105,7 @@ fn encode_operands(operands: Vec<Operand>) -> proc_macro2::TokenStream {
 }
 
 #[proc_macro]
+#[allow(unused_parens)]
 pub fn asm_x86(stream: TokenStream) -> TokenStream {
     let input = parse_macro_input!(stream as AsmStatements);
 

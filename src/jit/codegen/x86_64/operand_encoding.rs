@@ -304,7 +304,7 @@ impl Instruction {
                 };
 
                 instruction.primary_opcode += opcode_offset;
-                instruction.encode_register((registers::ACCUMULATOR_REG, access), false);
+                instruction.encode_register((registers::ACCUMULATOR, access), false);
                 instruction.encode_immediate(imm);
             }
             OperandEncoding::MemoryImmediate(mem_reg, imm) => {

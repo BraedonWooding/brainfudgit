@@ -69,6 +69,42 @@ pub enum Immediate {
     Imm64(u64),
 }
 
+impl From<i8> for Immediate {
+    fn from(item: i8) -> Self {
+        Immediate::Imm8(i8::from_le_bytes(item.to_le_bytes()))
+    }
+}
+
+impl From<u8> for Immediate {
+    fn from(item: u8) -> Self {
+        Immediate::Imm8(item)
+    }
+}
+
+impl From<u32> for Immediate {
+    fn from(item: u32) -> Self {
+        Immediate::Imm32(item)
+    }
+}
+
+impl From<i32> for Immediate {
+    fn from(item: i32) -> Self {
+        Immediate::Imm32(u32::from_le_bytes(item.to_le_bytes()))
+    }
+}
+
+impl From<i64> for Immediate {
+    fn from(item: i64) -> Self {
+        Immediate::Imm64(u64::from_le_bytes(item.to_le_bytes()))
+    }
+}
+
+impl From<u64> for Immediate {
+    fn from(item: u64) -> Self {
+        Immediate::Imm64(item)
+    }
+}
+
 impl Immediate {
     pub fn is_zero(&self) -> bool {
         return match *self {
@@ -176,11 +212,11 @@ impl Instruction {
 
     pub fn len(&self) -> usize {
         let mut buf = [0; 15];
-        self.read(&mut buf)
+        self.write_out(&mut buf)
             .expect("We pass a valid buffer we should expect a valid result here.")
     }
 
-    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn write_out(&self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.len() < 15 {
             return Err(io::Error::new(
                 ErrorKind::Interrupted,
