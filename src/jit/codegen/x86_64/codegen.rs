@@ -2,10 +2,14 @@ use std::{cell::RefCell, rc::Rc};
 
 use brainfudgit::asm_x86;
 
-use crate::{jit::codegen::CodeGen, bytecode::ByteCode, optimizer::{MirBasicBlock, MirAstKind}};
+use crate::{
+    bytecode::ByteCode,
+    jit::codegen::CodeGen,
+    optimizer::{MirAstKind, MirBasicBlock},
+};
 
 use super::{
-    instruction::{Displacement, Immediate, Instruction, self},
+    instruction::{self, Displacement, Immediate, Instruction},
     operand_encoding::{MemoryBaseRegister, Offset, OperandEncoding},
     ops::{self, JumpOperator},
     registers::{self, RegisterAccess, Registers},
@@ -120,9 +124,7 @@ impl X86_64Codegen {
     // [ ... ] => while (*dp != 0) { ... }
     // we more accurately translate it to this: if (*dp != 0) do {  } while (*dp != 0);
     // which avoids the double jump on the while loop.
-    fn while_loop<T: FnOnce(&mut X86_64Codegen) -> ()>(&mut self, emit_loop: T) {
-        
-    }
+    fn while_loop<T: FnOnce(&mut X86_64Codegen) -> ()>(&mut self, emit_loop: T) {}
 
     fn windows_call(&mut self) {
         asm_x86! {
@@ -145,11 +147,23 @@ impl CodeGen for X86_64Codegen {
             match instruction {
                 MirAstKind::ShiftDataPointer(i) => {
                     asm_x86! {
-                        add RSP, (i);
+                        $if (i > 0) {
+                            add RSP, i;
+                        } else {
+                            sub RSP, i;
+                        }
                     }
-                },
-                MirAstKind::DerefIncrement(_) => todo!(),
-                MirAstKind::DerefDecrement(_) => todo!(),
+                }
+                MirAstKind::DerefIncrement(i) => {
+                    asm_x86! {
+                        add [RSP], i;
+                    }
+                }
+                MirAstKind::DerefDecrement(i) => {
+                    asm_x86! {
+                        sub [RSP], i;
+                    }
+                }
                 MirAstKind::Write(_) => todo!(),
                 MirAstKind::Read(_) => todo!(),
                 MirAstKind::Loop(block) => {
@@ -157,18 +171,18 @@ impl CodeGen for X86_64Codegen {
                         cmp [SPL], 0;
                         jumpIfZero loop_end;
                         loop_start:
-            
+
                         $self.load(block);
-            
+
                         cmp [SPL], 0;
                         jumpIfNotZero loop_start;
                         loop_end:
                     };
-                },
+                }
             }
         }
     }
-    
+
     fn to_vec_u8(&self) -> Vec<u8> {
         // ideally we could calculate the length whenever we generate each instruction so that we know the full length
         // (this would make jump recalcs cheaper anyways) so in future maybe this becomes static?

@@ -1,11 +1,14 @@
 use std::collections::HashSet;
 
-use crate::{Optimizations, parser::{BasicBlock, AstKind, Program}};
+use crate::{
+    parser::{AstKind, BasicBlock, Program},
+    Optimizations,
+};
 
-use self::{constant_folding::constant_folding, comment_block::comment_block};
+use self::{comment_block::comment_block, constant_folding::constant_folding};
 
-pub mod constant_folding;
 pub mod comment_block;
+pub mod constant_folding;
 
 // Intermediate AST that contains a few optimizations
 // This is just to keep the high level AST clean
@@ -28,16 +31,21 @@ pub struct MirBasicBlock {
 }
 
 fn map_instructions(block: &BasicBlock) -> MirBasicBlock {
-    return MirBasicBlock { instructions: block.instructions.iter()
-        .map(|inst| match inst {
-            AstKind::Increment => MirAstKind::ShiftDataPointer(1),
-            AstKind::Decrement => MirAstKind::ShiftDataPointer(-1),
-            AstKind::DerefIncrement => MirAstKind::DerefIncrement(1),
-            AstKind::DerefDecrement => MirAstKind::DerefDecrement(1),
-            AstKind::Write => MirAstKind::Write(1),
-            AstKind::Read => MirAstKind::Read(1),
-            AstKind::Loop(inner_block) => MirAstKind::Loop(map_instructions(inner_block)),
-        }).collect() }
+    return MirBasicBlock {
+        instructions: block
+            .instructions
+            .iter()
+            .map(|inst| match inst {
+                AstKind::Increment => MirAstKind::ShiftDataPointer(1),
+                AstKind::Decrement => MirAstKind::ShiftDataPointer(-1),
+                AstKind::DerefIncrement => MirAstKind::DerefIncrement(1),
+                AstKind::DerefDecrement => MirAstKind::DerefDecrement(1),
+                AstKind::Write => MirAstKind::Write(1),
+                AstKind::Read => MirAstKind::Read(1),
+                AstKind::Loop(inner_block) => MirAstKind::Loop(map_instructions(inner_block)),
+            })
+            .collect(),
+    };
 }
 
 pub fn optimize(block: &Program, options: &HashSet<Optimizations>) -> MirBasicBlock {

@@ -16,16 +16,20 @@ impl ByteCodeInterpreter {
                 ByteCode::DerefSub(i) => runtime.deref_and_sub_value(*i),
                 ByteCode::Read(len) => runtime.read(*len),
                 ByteCode::Write(len) => runtime.write(*len),
-                ByteCode::JumpForwardsIfZero(offset) => if runtime.value_is_zero() {
-                    pc = pc.wrapping_add(*offset);
-                    // don't do the ++
-                    continue;
-                },
-                ByteCode::JumpBackwardsIfNonZero(offset) => if !runtime.value_is_zero() {
-                    pc = pc.wrapping_sub(*offset);
-                    // don't do the ++
-                    continue;
-                },
+                ByteCode::JumpForwardsIfZero(offset) => {
+                    if runtime.value_is_zero() {
+                        pc = pc.wrapping_add(*offset);
+                        // don't do the ++
+                        continue;
+                    }
+                }
+                ByteCode::JumpBackwardsIfNonZero(offset) => {
+                    if !runtime.value_is_zero() {
+                        pc = pc.wrapping_sub(*offset);
+                        // don't do the ++
+                        continue;
+                    }
+                }
             }
             pc += 1;
         }

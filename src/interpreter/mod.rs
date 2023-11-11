@@ -64,7 +64,11 @@ impl Runtime {
     /// check if the data pointer is within bounds
     fn check_data_pointer(&self) {
         if self.data_pointer >= self.heap.len() {
-            panic!("Data pointer ({}) out of bounds (max length {})", self.data_pointer, self.heap.len());
+            panic!(
+                "Data pointer ({}) out of bounds (max length {})",
+                self.data_pointer,
+                self.heap.len()
+            );
         }
     }
 }

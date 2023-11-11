@@ -1,4 +1,4 @@
-use crate::optimizer::{MirBasicBlock, MirAstKind};
+use crate::optimizer::{MirAstKind, MirBasicBlock};
 
 use super::ByteCode;
 
@@ -28,7 +28,7 @@ fn bytecode_write_block(instructions: &mut Vec<ByteCode>, block: &MirBasicBlock)
                 instructions.insert(current_len, ByteCode::JumpForwardsIfZero(offset + 2));
                 // we want to jump above the instruction above
                 instructions.push(ByteCode::JumpBackwardsIfNonZero(offset));
-            },
+            }
         }
     }
 }

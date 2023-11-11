@@ -92,13 +92,20 @@ impl Parse for AsmStatements {
 fn encode_operands(operands: Vec<Operand>) -> proc_macro2::TokenStream {
     match &operands[0..] {
         [Operand::Ident(ident), Operand::Expr(expr)] => quote! {
-            OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::Imm8(#expr))
+            #[allow(unused_parens)]
+            OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::from(#expr))
         },
         [Operand::Ident(ident), Operand::Ident(expr)] => quote! {
-            OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::Imm8(#expr))
+            #[allow(unused_parens)]
+            OperandEncoding::MemoryImmediate(MemoryBaseRegister::Register(registers::#ident), Immediate::from(#expr))
         },
         [Operand::MemoryRegister(ident), Operand::Expr(expr)] => quote! {
-            OperandEncoding::MemoryImmediate(MemoryBaseRegister::DisplacementOnly(registers::#ident, Displacement::ZeroByteDisplacement), Immediate::Imm8(#expr))
+            #[allow(unused_parens)]
+            OperandEncoding::MemoryImmediate(MemoryBaseRegister::DisplacementOnly(registers::#ident, Displacement::ZeroByteDisplacement), Immediate::from(#expr))
+        },
+        [Operand::MemoryRegister(ident), Operand::Ident(expr)] => quote! {
+            #[allow(unused_parens)]
+            OperandEncoding::MemoryImmediate(MemoryBaseRegister::DisplacementOnly(registers::#ident, Displacement::ZeroByteDisplacement), Immediate::from(#expr))
         },
         _ => todo!("{:#?}", operands),
     }

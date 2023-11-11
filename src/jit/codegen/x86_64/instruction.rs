@@ -71,7 +71,7 @@ pub enum Immediate {
 
 impl From<i8> for Immediate {
     fn from(item: i8) -> Self {
-        Immediate::Imm8(i8::from_le_bytes(item.to_le_bytes()))
+        Immediate::Imm8(u8::from_le_bytes(item.to_le_bytes()))
     }
 }
 
@@ -102,6 +102,18 @@ impl From<i64> for Immediate {
 impl From<u64> for Immediate {
     fn from(item: u64) -> Self {
         Immediate::Imm64(item)
+    }
+}
+
+impl From<isize> for Immediate {
+    fn from(item: isize) -> Self {
+        Immediate::Imm64(u64::from_le_bytes(item.to_le_bytes()))
+    }
+}
+
+impl From<usize> for Immediate {
+    fn from(item: usize) -> Self {
+        Immediate::Imm64(item as u64)
     }
 }
 
